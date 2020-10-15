@@ -13,7 +13,7 @@ df = pd.DataFrame()
 while offset <= 9900:
     payload = {'limit': limit, 'offset': offset}
 
-    API_ACCESS_KEY='KAeiFwuJQ22ZVPTJ4f7t'
+    API_ACCESS_KEY='###################'
 
     headers = {
         'Authorization': 'Token token={0}'.format(API_ACCESS_KEY),
@@ -69,9 +69,9 @@ df = df.rename(columns={'escalation_policy.summary': 'escalation_policy_summary'
 #Check for the last item in SQL Server Table
 conn_R = pyodbc.connect(
     'Driver={SQL Server};'
-    'Server=AMAZCOMSDBQA01.qa.ardentmills.com;'
-    'Database=MillsEntOps;'
-    'Trusted_Connection=yes;')
+    'Server=###############;'
+    'Database=#############;'
+    'Trusted_Connection=yes;')      #for windows login
 
 cursor = conn_R.cursor()
 cursor.execute('SELECT TOP 1 Incident_Number FROM PagerDuty_Incidents ORDER BY Incident_Number Desc')
@@ -91,9 +91,9 @@ df2 = df2.fillna(value=0)
 #Insert new records into SQL server DB
 conn_I = pyodbc.connect(
     'Driver={SQL Server};'
-    'Server=AMAZCOMSDBQA01.qa.ardentmills.com;'
-    'Database=MillsEntOps;'
-    'Trusted_Connection=yes;')
+    'Server=#################;'
+    'Database=###############;'
+    'Trusted_Connection=yes;')       #for windows login
 
 
 cursor = conn_I.cursor()
