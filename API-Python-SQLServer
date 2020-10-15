@@ -1,0 +1,106 @@
+import requests
+import pandas as pd   
+import json
+from pandas.io.json import json_normalize
+import pyodbc
+
+#Set Parameters
+offset = 0
+limit = 100
+df = pd.DataFrame() 
+
+#Create Request
+while offset <= 9900:
+    payload = {'limit': limit, 'offset': offset}
+
+    API_ACCESS_KEY='KAeiFwuJQ22ZVPTJ4f7t'
+
+    headers = {
+        'Authorization': 'Token token={0}'.format(API_ACCESS_KEY),
+        'Content-type': 'application/json',
+        'Accept': 'application/vnd.pagerduty+json;version=2',
+        }
+
+    r = requests.get(
+                    'https://api.pagerduty.com/incidents?time_zone=MST',
+                    headers=headers,
+                    params=payload,
+                    )
+
+
+#Proccess requests into a dataframe
+    a_json = json.loads(r.content)
+    
+    dataframe = json_normalize(a_json['incidents'])
+        
+    
+    df = df.append(dataframe)
+    
+    if offset >= 9900:
+        break
+    
+    offset = offset + limit
+
+
+#Retain required columns    
+df = df[['incident_number'
+            , 'title'
+            , 'summary'
+            , 'status'
+            , 'urgency'
+            , 'assigned_via'
+            , 'created_at'
+            , 'description'
+            , 'escalation_policy.summary'
+            , 'last_status_change_by.summary'
+            , 'priority.created_at'
+            , 'priority.name']]
+    
+#Data Wrangling
+df['created_month'] = df['created_at'].apply(lambda date: date.split('-')[1])
+df['created_year'] = df['created_at'].apply(lambda date: date.split('-')[0])
+
+df['created_month_year'] = df['created_year'].map(str) + '-' + df['created_month'].map(str)
+
+df = df.drop(columns=['created_month', 'created_year'])
+
+df = df.rename(columns={'escalation_policy.summary': 'escalation_policy_summary', 'last_status_change_by.summary': 'last_status_change_by_summary', 'priority.created_at': 'priority_created_at', 'priority.name': 'priority_name'})
+
+#Check for the last item in SQL Server Table
+conn_R = pyodbc.connect(
+    'Driver={SQL Server};'
+    'Server=AMAZCOMSDBQA01.qa.ardentmills.com;'
+    'Database=MillsEntOps;'
+    'Trusted_Connection=yes;')
+
+cursor = conn_R.cursor()
+cursor.execute('SELECT TOP 1 Incident_Number FROM PagerDuty_Incidents ORDER BY Incident_Number Desc')
+
+for row in cursor:
+    x = row
+
+x[0]
+
+#Move non existing items to new DF
+df2 = df.iloc[x[0]:]
+
+
+df2 = df2.fillna(value=0)
+
+
+#Insert new records into SQL server DB
+conn_I = pyodbc.connect(
+    'Driver={SQL Server};'
+    'Server=AMAZCOMSDBQA01.qa.ardentmills.com;'
+    'Database=MillsEntOps;'
+    'Trusted_Connection=yes;')
+
+
+cursor = conn_I.cursor()
+
+# Insert Dataframe into SQL Server:
+for index, row in df2.iterrows():
+    cursor.execute("INSERT INTO PagerDuty_Incidents (Incident_Number,Title,Summary,Status,Urgency,Assigned_via,Created_TS,Description,Escalation_policy_summary,Last_status_change_summary,Priority_created_at,Priority_name,Created_on) values(?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                   , row.incident_number, row.title, row.summary, row.status, row.urgency,row.assigned_via, row.created_at, row.description, row.escalation_policy_summary, row.last_status_change_by_summary, row.priority_created_at, row.priority_name, row.created_month_year)
+conn_I.commit()
+cursor.close()
